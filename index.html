@@ -33,14 +33,15 @@
       top: 20px;
       left: 50%;
       transform: translateX(-50%);
-      font-size: 16px;
+      font-size: 14px;
       color: #0af;
       text-align: center;
-      padding: 8px 16px;
-      background: rgba(0, 0, 0, 0.8);
+      padding: 10px 20px;
+      background: rgba(0, 0, 0, 0.9);
       border-radius: 8px;
       z-index: 10;
       max-width: 90%;
+      font-weight: 500;
     }
 
     #video {
@@ -61,39 +62,80 @@
 
     .waiting {
       text-align: center;
-      font-size: 24px;
+      font-size: 20px;
       color: #666;
-      padding: 20px;
+      padding: 40px;
     }
 
     .waiting-icon {
-      font-size: 64px;
+      font-size: 72px;
       margin-bottom: 20px;
       animation: pulse 2s infinite;
     }
 
     @keyframes pulse {
-      0%, 100% { opacity: 0.5; }
+      0%, 100% { opacity: 0.4; }
       50% { opacity: 1; }
     }
+
+    .debug {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      font-size: 11px;
+      color: #666;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      max-width: 300px;
+    }
+
+    .success { color: #0f0; }
+    .error { color: #f00; }
+    .info { color: #0af; }
   </style>
 </head>
 <body>
   <div class="container">
-    <div id="status">Waiting for stream...</div>
+    <div id="status">Initializing receiver...</div>
     <div class="waiting" id="waiting">
       <div class="waiting-icon">📱</div>
-      <div>Ready to receive screen mirror</div>
+      <div>Waiting for iPhone to start broadcast...</div>
+      <p style="font-size: 14px; margin-top: 20px; color: #888;">
+        Receiver app is ready and listening
+      </p>
     </div>
     <img id="video" src="" alt="Screen stream" />
+    <div class="debug" id="debug"></div>
   </div>
   
   <script>
     const status = document.getElementById('status');
     const videoElement = document.getElementById('video');
     const waiting = document.getElementById('waiting');
+    const debug = document.getElementById('debug');
     
-    console.log('🚀 Receiver initialized');
+    let streamURL = null;
+    let retryCount = 0;
+    let isConnected = false;
+    
+    // Debug logging
+    function log(message, type = 'info') {
+      const time = new Date().toLocaleTimeString();
+      const entry = `<div class="${type}">[${time}] ${message}</div>`;
+      debug.innerHTML = entry + debug.innerHTML;
+      
+      // Keep only last 10 entries
+      const entries = debug.querySelectorAll('div');
+      if (entries.length > 10) {
+        entries[entries.length - 1].remove();
+      }
+      
+      console.log(`[${type}] ${message}`);
+    }
+    
+    log('🚀 Receiver initialized');
     
     // Parse URL parameters
     function getQueryParam(param) {
@@ -101,82 +143,156 @@
       return urlParams.get(param);
     }
     
-    // Get base URL from query params
-    const baseURL = getQueryParam('baseURL');
-    const action = getQueryParam('action');
+    // Get stream URL from query parameter
+    const baseURL = getQueryParam('streamURL');
     
-    console.log('📍 Base URL:', baseURL);
-    console.log('📍 Action:', action);
-    
-    if (action === 'stop') {
-      stopStream();
-    } else if (baseURL) {
-      // Extract IP and port from base URL
-      // Format: http://172.16.30.108:8889 or http://172.16.30.108:8889/
-      const cleanBaseURL = baseURL.replace(/\/$/, ''); // Remove trailing slash
-      const streamURL = `${cleanBaseURL}/stream.mjpeg`;
-      console.log('🎬 Stream URL:', streamURL);
-      playStream(streamURL);
+    if (baseURL) {
+      // Construct stream URL
+      streamURL = baseURL.includes('/stream.mjpeg') 
+        ? baseURL 
+        : `${baseURL}/stream.mjpeg`;
+      
+      log(`✅ Stream URL: ${streamURL}`, 'success');
+      status.textContent = '🔄 Connecting to iPhone...';
+      
+      // Start trying to connect
+      setTimeout(() => connectToStream(), 500);
     } else {
-      console.log('⏳ Waiting for base URL...');
+      log('⏳ Waiting for stream URL...', 'info');
+      status.textContent = 'Waiting for iPhone...';
+      
+      // Poll for stream URL every 2 seconds
+      setInterval(checkForStreamURL, 2000);
     }
     
-    function playStream(url) {
-      console.log('▶️ Playing stream from:', url);
-      status.textContent = '🔴 Connecting...';
-      waiting.style.display = 'none';
+    function checkForStreamURL() {
+      const newBaseURL = new URLSearchParams(window.location.search).get('streamURL');
+      if (newBaseURL && newBaseURL !== baseURL) {
+        window.location.reload();
+      }
+    }
+    
+    function connectToStream() {
+      if (!streamURL) {
+        log('❌ No stream URL', 'error');
+        return;
+      }
+      
+      log(`🔗 Attempting connection... (try ${retryCount + 1})`);
       
       // Add timestamp to prevent caching
       const timestamp = Date.now();
-      const separator = url.includes('?') ? '&' : '?';
-      const streamUrlWithCache = `${url}${separator}_t=${timestamp}`;
+      const urlWithCache = `${streamURL}?t=${timestamp}`;
       
-      videoElement.src = streamUrlWithCache;
+      videoElement.src = urlWithCache;
       videoElement.classList.add('active');
+      waiting.style.display = 'none';
       
-      videoElement.onload = function() {
-        console.log('✅ Stream loaded');
-        status.textContent = '🔴 Live Stream Active';
-        status.style.background = 'rgba(0, 100, 0, 0.7)';
-      };
+      // Set up event handlers
+      videoElement.onload = handleStreamSuccess;
+      videoElement.onerror = handleStreamError;
+    }
+    
+    function handleStreamSuccess() {
+      log('✅ Stream connected!', 'success');
+      status.textContent = '🔴 LIVE - Screen Mirroring Active';
+      status.style.background = 'rgba(0, 150, 0, 0.9)';
+      isConnected = true;
+      retryCount = 0;
       
-      videoElement.onerror = function(e) {
-        console.error('❌ Stream error:', e);
-        status.textContent = '⚠️ Connection lost. Retrying...';
-        status.style.background = 'rgba(139, 69, 0, 0.7)';
+      // Monitor stream health
+      monitorStream();
+    }
+    
+    function handleStreamError(e) {
+      isConnected = false;
+      retryCount++;
+      
+      log(`❌ Connection failed (attempt ${retryCount})`, 'error');
+      
+      if (retryCount < 10) {
+        status.textContent = `⚠️ Connecting... (attempt ${retryCount}/10)`;
+        status.style.background = 'rgba(200, 100, 0, 0.9)';
+        
+        // Exponential backoff
+        const delay = Math.min(1000 * Math.pow(1.3, retryCount - 1), 5000);
+        log(`🔄 Retrying in ${Math.round(delay/1000)}s...`);
         
         setTimeout(() => {
           const newTimestamp = Date.now();
-          const newUrl = url.includes('?') 
-            ? url.split('?')[0] + `?_t=${newTimestamp}`
-            : url + `?_t=${newTimestamp}`;
-          videoElement.src = newUrl;
-        }, 2000);
-      };
-    }
-    
-    function stopStream() {
-      console.log('⏹️ Stopping stream');
-      videoElement.src = '';
-      videoElement.classList.remove('active');
-      waiting.style.display = 'block';
-      status.textContent = 'Stream stopped';
-      status.style.background = 'rgba(0, 0, 0, 0.7)';
-    }
-    
-    // Listen for URL changes
-    let lastBaseURL = baseURL;
-    setInterval(() => {
-      const currentBaseURL = new URLSearchParams(window.location.search).get('baseURL');
-      if (currentBaseURL && currentBaseURL !== lastBaseURL) {
-        console.log('🔄 Base URL changed, reloading...');
-        lastBaseURL = currentBaseURL;
-        const cleanBaseURL = currentBaseURL.replace(/\/$/, '');
-        playStream(`${cleanBaseURL}/stream.mjpeg`);
+          videoElement.src = `${streamURL}?t=${newTimestamp}`;
+        }, delay);
+      } else {
+        log('❌ Connection failed after 10 attempts', 'error');
+        status.textContent = '❌ Cannot connect to iPhone';
+        status.style.background = 'rgba(150, 0, 0, 0.9)';
+        waiting.style.display = 'block';
+        waiting.innerHTML = `
+          <div class="waiting-icon">⚠️</div>
+          <div>Cannot connect to iPhone</div>
+          <p style="font-size: 14px; margin-top: 20px; color: #f88;">
+            Check:<br>
+            • iPhone broadcast is running<br>
+            • Both devices on same WiFi<br>
+            • Router AP Isolation is disabled
+          </p>
+        `;
+        
+        // Try again after 10 seconds
+        setTimeout(() => {
+          retryCount = 0;
+          connectToStream();
+        }, 10000);
       }
-    }, 2000);
+    }
     
-    console.log('✅ Receiver ready');
+    function monitorStream() {
+      // Check stream health every 5 seconds
+      setInterval(() => {
+        if (isConnected) {
+          // Try to fetch a single frame to verify stream is alive
+          fetch(`${streamURL.replace('/stream.mjpeg', '/frame.jpg')}?t=${Date.now()}`, {
+            method: 'HEAD',
+            mode: 'no-cors'
+          }).then(() => {
+            // Stream is alive
+          }).catch(() => {
+            log('⚠️ Stream may have stopped', 'error');
+          });
+        }
+      }, 5000);
+    }
+    
+    // Prevent screen from sleeping
+    let wakeLock = null;
+    async function requestWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+          log('🔋 Screen wake lock active', 'success');
+        }
+      } catch (err) {
+        log('⚠️ Wake lock unavailable', 'info');
+      }
+    }
+    
+    if (streamURL) {
+      requestWakeLock();
+    }
+    
+    // Handle visibility change
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        log('👁️ Page hidden');
+      } else {
+        log('👁️ Page visible');
+        if (streamURL && !isConnected) {
+          connectToStream();
+        }
+      }
+    });
+    
+    log('✅ Receiver ready');
   </script>
 </body>
 </html>

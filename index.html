@@ -3,36 +3,66 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Screen Mirroring Receiver</title>
+  <title>Screen Mirroring Receiver - Debug</title>
   <style>
-    html, body {
+    * {
       margin: 0;
       padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
       background: #000;
-      height: 100%;
-      overflow: hidden;
       color: white;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      color: #0af;
+      margin-bottom: 20px;
+    }
+
+    .status {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+
+    .status-item {
+      margin: 10px 0;
+      font-family: monospace;
+    }
+
+    .label {
+      color: #0af;
+      display: inline-block;
+      width: 150px;
+    }
+
+    .video-container {
+      background: #111;
+      border: 2px solid #333;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      min-height: 400px;
       display: flex;
       align-items: center;
       justify-content: center;
       flex-direction: column;
     }
 
-    #status {
-      position: absolute;
-      top: 20px;
-      font-size: 18px;
-      color: #0af;
-      text-align: center;
-      padding: 0 20px;
-      z-index: 10;
-    }
-
     #video {
       max-width: 100%;
-      max-height: 100%;
-      border: none;
+      max-height: 70vh;
+      border: 2px solid #0af;
       display: none;
     }
 
@@ -41,21 +71,159 @@
     }
 
     .waiting {
-      text-align: center;
-      font-size: 24px;
       color: #666;
+      text-align: center;
+      padding: 40px;
+    }
+
+    .tests {
+      background: rgba(255, 255, 255, 0.05);
+      padding: 20px;
+      border-radius: 8px;
+      margin-top: 20px;
+    }
+
+    .test-item {
+      margin: 15px 0;
+      padding: 10px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 4px;
+    }
+
+    .test-item.success {
+      border-left: 4px solid #0f0;
+    }
+
+    .test-item.error {
+      border-left: 4px solid #f00;
+    }
+
+    .test-item.pending {
+      border-left: 4px solid #fa0;
+    }
+
+    button {
+      background: #0af;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      margin: 5px;
+    }
+
+    button:hover {
+      background: #08d;
+    }
+
+    .log {
+      background: #000;
+      color: #0f0;
+      padding: 15px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 12px;
+      max-height: 300px;
+      overflow-y: auto;
+      margin-top: 20px;
+    }
+
+    .log-entry {
+      margin: 5px 0;
+      word-wrap: break-word;
+    }
+
+    .error-text {
+      color: #f00;
+    }
+
+    .success-text {
+      color: #0f0;
+    }
+
+    .info-text {
+      color: #0af;
     }
   </style>
 </head>
 <body>
-  <div id="status">Waiting for stream...</div>
-  <div class="waiting" id="waiting">Ready to receive screen mirror</div>
-  <img id="video" src="" alt="Screen stream" />
+  <div class="container">
+    <h1>🔍 Screen Mirroring Receiver - Diagnostic Mode</h1>
+    
+    <div class="status">
+      <div class="status-item">
+        <span class="label">Status:</span>
+        <span id="status">Initializing...</span>
+      </div>
+      <div class="status-item">
+        <span class="label">Stream URL:</span>
+        <span id="streamUrl">-</span>
+      </div>
+      <div class="status-item">
+        <span class="label">Current Time:</span>
+        <span id="currentTime">-</span>
+      </div>
+      <div class="status-item">
+        <span class="label">Connection:</span>
+        <span id="connectionStatus">-</span>
+      </div>
+    </div>
+
+    <div class="video-container">
+      <div class="waiting" id="waiting">
+        <h2>📱 Waiting for stream...</h2>
+        <p>Start broadcast on your iPhone</p>
+      </div>
+      <img id="video" src="" alt="Screen stream" />
+    </div>
+
+    <div class="tests">
+      <h2>🧪 Diagnostic Tests</h2>
+      <button onclick="runAllTests()">Run All Tests</button>
+      <button onclick="testStreamDirect()">Test Stream Directly</button>
+      <button onclick="clearLogs()">Clear Logs</button>
+      
+      <div id="testResults"></div>
+    </div>
+
+    <div class="log" id="log">
+      <div class="log-entry info-text">📋 Console log will appear here...</div>
+    </div>
+  </div>
   
   <script>
-    const status = document.getElementById('status');
+    const statusEl = document.getElementById('status');
+    const streamUrlEl = document.getElementById('streamUrl');
+    const currentTimeEl = document.getElementById('currentTime');
+    const connectionStatusEl = document.getElementById('connectionStatus');
     const videoElement = document.getElementById('video');
     const waiting = document.getElementById('waiting');
+    const logEl = document.getElementById('log');
+    const testResultsEl = document.getElementById('testResults');
+    
+    let streamURL = null;
+    let testResults = [];
+    
+    // Update current time
+    setInterval(() => {
+      currentTimeEl.textContent = new Date().toLocaleTimeString();
+    }, 1000);
+    
+    // Logging function
+    function log(message, type = 'info') {
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}-text`;
+      const timestamp = new Date().toLocaleTimeString();
+      entry.textContent = `[${timestamp}] ${message}`;
+      logEl.appendChild(entry);
+      logEl.scrollTop = logEl.scrollHeight;
+      console.log(message);
+    }
+    
+    function clearLogs() {
+      logEl.innerHTML = '<div class="log-entry info-text">📋 Logs cleared</div>';
+    }
     
     // Parse URL parameters
     function getQueryParam(param) {
@@ -63,58 +231,188 @@
       return urlParams.get(param);
     }
     
-    // Check for stream URL in query parameters
-    const streamURL = getQueryParam('streamURL');
+    // Initialize
+    log('🚀 Receiver initialized');
+    log('📍 Page URL: ' + window.location.href);
+    
+    streamURL = getQueryParam('streamURL');
     const action = getQueryParam('action');
     
-    if (action === 'stop') {
+    if (streamURL) {
+      log('✅ Stream URL found: ' + streamURL, 'success');
+      streamUrlEl.textContent = streamURL;
+      setTimeout(() => {
+        log('⏳ Starting stream in 1 second...');
+        playStream(streamURL);
+      }, 1000);
+    } else if (action === 'stop') {
+      log('⏹️ Stop action received');
       stopStream();
-    } else if (streamURL) {
-      playStream(streamURL);
+    } else {
+      log('⚠️ No stream URL in query parameters', 'error');
+      log('💡 Waiting for iPhone to send stream URL...');
+      statusEl.textContent = 'Waiting for stream URL';
     }
     
     function playStream(url) {
-      console.log('Playing stream from:', url);
-      status.textContent = 'Streaming from: ' + url;
+      log('▶️ Attempting to play stream: ' + url);
+      statusEl.textContent = '🔴 Attempting to connect...';
       waiting.style.display = 'none';
-      videoElement.src = url;
+      
+      // Test if URL is reachable first
+      testStreamConnection(url).then(reachable => {
+        if (reachable) {
+          log('✅ Stream endpoint is reachable', 'success');
+          actuallyPlayStream(url);
+        } else {
+          log('❌ Stream endpoint is NOT reachable', 'error');
+          log('💡 Make sure iPhone and this device are on same WiFi', 'error');
+          statusEl.textContent = '❌ Cannot reach stream URL';
+          connectionStatusEl.textContent = '❌ Not reachable';
+        }
+      });
+    }
+    
+    function actuallyPlayStream(url) {
+      // Add cache buster
+      const urlWithTimestamp = url.includes('?') 
+        ? url + '&t=' + Date.now() 
+        : url + '?t=' + Date.now();
+      
+      log('🎬 Loading stream with URL: ' + urlWithTimestamp);
+      videoElement.src = urlWithTimestamp;
       videoElement.classList.add('active');
       
-      // Handle image load errors
-      videoElement.onerror = function() {
-        status.textContent = '⚠️ Connection lost. Retrying...';
-        // Retry after 2 seconds
-        setTimeout(() => {
-          videoElement.src = url + '?t=' + Date.now();
-        }, 2000);
+      // Handle load success
+      videoElement.onload = function() {
+        log('✅ Stream loaded successfully!', 'success');
+        statusEl.textContent = '🔴 Live Stream Active';
+        connectionStatusEl.textContent = '✅ Connected';
       };
       
-      videoElement.onload = function() {
-        status.textContent = '🔴 Live Stream Active';
+      // Handle errors
+      videoElement.onerror = function(e) {
+        log('❌ Stream error occurred', 'error');
+        log('Error details: ' + JSON.stringify(e), 'error');
+        statusEl.textContent = '⚠️ Connection lost. Retrying...';
+        connectionStatusEl.textContent = '❌ Error';
+        
+        // Retry after 2 seconds
+        setTimeout(() => {
+          log('🔄 Retrying connection...');
+          const retryUrl = url.includes('?') 
+            ? url.split('?')[0] + '?t=' + Date.now() 
+            : url + '?t=' + Date.now();
+          videoElement.src = retryUrl;
+        }, 2000);
       };
     }
     
     function stopStream() {
-      console.log('Stopping stream');
+      log('⏹️ Stopping stream');
       videoElement.src = '';
       videoElement.classList.remove('active');
       waiting.style.display = 'block';
-      status.textContent = 'Stream stopped';
+      statusEl.textContent = 'Stream stopped';
+      connectionStatusEl.textContent = '⏹️ Stopped';
     }
     
-    // Listen for messages (for future Cast SDK integration)
-    window.addEventListener('message', (event) => {
-      const data = event.data;
-      console.log('Received message:', data);
-      
-      if (data.type === 'PLAY_STREAM') {
-        playStream(data.url);
-      } else if (data.type === 'STOP_STREAM') {
-        stopStream();
+    // Test stream connection
+    async function testStreamConnection(url) {
+      try {
+        log('🧪 Testing connection to: ' + url);
+        const response = await fetch(url, {
+          method: 'HEAD',
+          mode: 'no-cors'
+        });
+        log('✅ Fetch completed (no-cors mode)', 'success');
+        return true;
+      } catch (error) {
+        log('❌ Fetch error: ' + error.message, 'error');
+        return false;
       }
-    });
+    }
     
-    console.log('Receiver ready');
+    // Run all diagnostic tests
+    async function runAllTests() {
+      testResultsEl.innerHTML = '<h3>Running tests...</h3>';
+      testResults = [];
+      
+      // Test 1: Check if stream URL exists
+      addTestResult('Stream URL Present', streamURL ? 'success' : 'error', 
+        streamURL ? 'Stream URL: ' + streamURL : 'No stream URL found');
+      
+      // Test 2: Parse URL
+      if (streamURL) {
+        try {
+          const urlObj = new URL(streamURL);
+          addTestResult('URL Valid', 'success', 
+            `Protocol: ${urlObj.protocol}, Host: ${urlObj.hostname}, Port: ${urlObj.port}`);
+        } catch (e) {
+          addTestResult('URL Valid', 'error', 'Invalid URL format: ' + e.message);
+        }
+      }
+      
+      // Test 3: Try to fetch stream
+      if (streamURL) {
+        log('🧪 Attempting to fetch stream...');
+        try {
+          const response = await fetch(streamURL, {
+            method: 'GET',
+            mode: 'no-cors'
+          });
+          addTestResult('Stream Fetch', 'success', 'Fetch completed (check network tab for details)');
+        } catch (error) {
+          addTestResult('Stream Fetch', 'error', error.message);
+        }
+      }
+      
+      // Test 4: Check same network
+      if (streamURL) {
+        const urlObj = new URL(streamURL);
+        const isLocalIP = urlObj.hostname.startsWith('192.168.') || 
+                          urlObj.hostname.startsWith('10.') ||
+                          urlObj.hostname.startsWith('172.');
+        addTestResult('Local Network', isLocalIP ? 'success' : 'error',
+          isLocalIP ? 'IP appears to be local network' : 'IP does not appear to be local network');
+      }
+      
+      renderTestResults();
+    }
+    
+    function testStreamDirect() {
+      if (streamURL) {
+        log('🔗 Opening stream URL in new tab...');
+        window.open(streamURL, '_blank');
+      } else {
+        log('❌ No stream URL to test', 'error');
+      }
+    }
+    
+    function addTestResult(name, status, details) {
+      testResults.push({ name, status, details });
+    }
+    
+    function renderTestResults() {
+      let html = '<h3>Test Results:</h3>';
+      testResults.forEach(test => {
+        html += `
+          <div class="test-item ${test.status}">
+            <strong>${test.name}:</strong> 
+            ${test.status === 'success' ? '✅' : '❌'} 
+            ${test.details}
+          </div>
+        `;
+      });
+      testResultsEl.innerHTML = html;
+    }
+    
+    // Auto-run tests if stream URL present
+    if (streamURL) {
+      setTimeout(() => runAllTests(), 2000);
+    }
+    
+    log('✅ Diagnostic page ready');
   </script>
 </body>
 </html>

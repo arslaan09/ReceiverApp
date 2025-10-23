@@ -43,6 +43,7 @@
 </head>
 <body>
     <h1>🔍 Stream Diagnostics</h1>
+    <p style="color: #ff0;">Note: If this page is served over HTTPS (e.g., Vercel), loading HTTP streams may be blocked by browsers (mixed content). For best results, open http://[IP]:8889/view directly on the same network, or use a browser extension to allow mixed content.</p>
     
     <div class="test">
         <h3>Test 1: Direct Stream Access</h3>
@@ -109,7 +110,7 @@
             
             img.onerror = function() {
                 document.getElementById('imageStatus').innerHTML = 
-                    `<p class="error">❌ MJPEG stream failed</p>`;
+                    `<p class="error">❌ MJPEG stream failed (check mixed content in console)</p>`;
                 console.log('❌ MJPEG failed');
             };
         }
